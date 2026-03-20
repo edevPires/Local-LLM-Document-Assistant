@@ -1,0 +1,19 @@
+# Django
+django>=5.0
+djangorestframework
+django-cors-headers
+
+# LLM — chamadas HTTP para o llama-server (stdlib, sem dependências extras)
+# O modelo roda via: C:\Users\bruno\llama.cpp\build\bin\llama-server.exe
+langchain
+langchain-community
+# llama-cpp-python  ← removido: substituído pelo llama-server externo
+
+# Document processing (Milestone 2)
+PyPDF2
+python-docx
+
+# RAG - Vector Store (Milestone 3)
+chromadb
+sentence-transformers
+# langchain-huggingface

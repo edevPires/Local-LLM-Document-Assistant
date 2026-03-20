@@ -1,0 +1,33 @@
+# Virtual environment
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Django
+*.sqlite3
+backend/media/
+backend/chroma_db/
+
+# LLM Models (too large for git)
+models/*.gguf
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Docs (internal planning, not for repo)
+docs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
