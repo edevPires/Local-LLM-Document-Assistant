@@ -41,6 +41,11 @@ urlpatterns = [
         views.send_message,
         name="send-message",
     ),
+    path(
+        "conversations/<int:conversation_id>/messages/stream/",
+        views.send_message_stream,
+        name="send-message-stream",
+    ),
 
     # Upload de documentos (PDF/DOCX) — Milestone 2
     path(

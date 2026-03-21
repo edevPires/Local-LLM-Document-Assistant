@@ -29,7 +29,10 @@ Frontend POST /api/conversations/1/messages/ {"content": "Olá"}
 """
 
 import logging
+import json
 
+from django.http import StreamingHttpResponse
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -253,3 +256,135 @@ def upload_document(request, conversation_id):
         DocumentSerializer(document).data,
         status=status.HTTP_201_CREATED,
     )
+
+
+@csrf_exempt
+def send_message_stream(request, conversation_id):
+    """
+    POST /api/conversations/{id}/messages/stream/
+    Envia mensagem e retorna resposta via SSE (Server-Sent Events).
+
+    CONCEITO - FLUXO COMPLETO:
+    1. Recebe {"content": "Olá, como vai?"} do frontend
+    2. Salva a mensagem do usuário no banco
+    3. Busca todo o histórico da conversa
+    4. Monta a lista de mensagens para o LLM
+    5. Chama llm_service.chat_stream() ou rag_service.ask_stream()
+    6. Faz yield de cada token como evento SSE
+    7. Ao terminar, salva a mensagem do assistente no banco
+    8. Retorna resposta com `done: true`
+
+    Formato SSE:
+        data: {"token": "O"}
+        data: {"token": " contrato"}
+        data: {"done": true, "message_id": 42}
+    """
+    # 1. Validar que a conversa existe
+    try:
+        conversation = Conversation.objects.get(pk=conversation_id)
+    except Conversation.DoesNotExist:
+        return Response(
+            {"error": "Conversa não encontrada"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # 2. Validar o conteúdo da mensagem
+    try:
+        data = json.loads(request.body.decode())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return StreamingHttpResponse(
+            "data: " + json.dumps({"error": "Corpo JSON inválido"}) + "\n\n",
+            content_type="text/event-stream",
+            status=400
+        )
+
+    content = data.get("content", "").strip()
+    if not content:
+        return StreamingHttpResponse(
+            "data: " + json.dumps({"error": "O campo 'content' é obrigatório"}) + "\n\n",
+            content_type="text/event-stream",
+            status=400
+        )
+
+    # 3. Salvar a mensagem do usuário no banco ANTES de fazer streaming
+    user_message = Message.objects.create(
+        conversation=conversation,
+        role="user",
+        content=content,
+    )
+
+    # 4. Buscar histórico completo da conversa para dar contexto ao LLM
+    history = list(conversation.messages.all().values("role", "content"))
+    messages_for_llm = [{"role": m["role"], "content": m["content"]} for m in history]
+
+    # 5. Detectar se usa RAG ou chat simples
+    has_rag = conversation.documents.filter(is_indexed=True).exists()
+
+    def event_stream():
+        """Generator SSE: yield cada token como evento JSON."""
+        full_response = []
+        assistant_message = None
+
+        try:
+            logger.info("Iniciando stream para conversa %d (RAG=%s)", conversation_id, has_rag)
+
+            # Escolher gerador (RAG ou chat simples)
+            if has_rag:
+                logger.info("Usando RAG para stream")
+                token_gen = rag_service.ask_stream(conversation_id, content, messages_for_llm)
+            else:
+                logger.info("Chat stream sem RAG")
+                token_gen = llm_service.chat_stream(messages_for_llm)
+
+            # Iterar tokens e fazer yield como SSE
+            for token in token_gen:
+                full_response.append(token)
+                payload = json.dumps({"token": token}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+
+            logger.info("Tokens recebidos: %d", len(full_response))
+
+        except Exception as e:
+            logger.error("Erro no streaming: %s", str(e), exc_info=True)
+            error_payload = json.dumps({"error": str(e)}, ensure_ascii=False)
+            yield f"data: {error_payload}\n\n"
+
+        finally:
+            # Salvar resposta do assistente
+            assistant_text = "".join(full_response) if full_response else "[Resposta vazia]"
+
+            try:
+                assistant_message = Message.objects.create(
+                    conversation=conversation,
+                    role="assistant",
+                    content=assistant_text,
+                )
+
+                # Atualizar título se primeira resposta
+                if conversation.messages.count() == 2:
+                    title = content[:50] + ("..." if len(content) > 50 else "")
+                    conversation.title = title
+                    conversation.save()
+
+                logger.info("Resposta salva: message_id=%d", assistant_message.id)
+
+            except Exception as e:
+                logger.error("Erro ao salvar resposta: %s", str(e), exc_info=True)
+
+            # Enviar evento final
+            if assistant_message:
+                done_payload = json.dumps(
+                    {
+                        "done": True,
+                        "message_id": assistant_message.id,
+                        "user_message_id": user_message.id,
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"data: {done_payload}\n\n"
+
+    # Retornar resposta com tipo SSE
+    response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response

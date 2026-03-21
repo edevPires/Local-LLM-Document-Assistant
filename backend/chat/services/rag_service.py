@@ -326,3 +326,54 @@ def ask(
     response = llm_service.chat(messages_with_rag)
 
     return response
+
+
+def ask_stream(
+    conversation_id: int,
+    question: str,
+    history: list[dict],
+):
+    """
+    Pipeline RAG completo com streaming (generator).
+
+    CONCEITO: Idêntico ao ask(), mas usa chat_stream() em vez de chat().
+    Retorna um generator que yield tokens um a um.
+
+    Args:
+        conversation_id: ID da conversa
+        question: pergunta do usuário
+        history: histórico de mensagens
+
+    Yields:
+        str: tokens individuais da resposta (um a um)
+    """
+    logger.info("Iniciando pipeline RAG com streaming para conversa %d", conversation_id)
+
+    # 1. Buscar chunks relevantes
+    chunks = search(conversation_id, question, n_results=3)
+
+    if not chunks:
+        logger.warning(
+            "Nenhum chunk encontrado. Caindo back para chat_stream sem RAG."
+        )
+        # Fallback: stream sem RAG
+        yield from llm_service.chat_stream(history)
+        return
+
+    # 2. Montar contexto
+    context = "\n\n".join(chunks)
+
+    # 3. Preparar mensagens com o prompt RAG
+    rag_system_prompt = SYSTEM_PROMPT_RAG.format(context=context)
+
+    # Reconstruir histórico com o novo system prompt
+    messages_with_rag = [{"role": "system", "content": rag_system_prompt}]
+
+    # Adicionar histórico (excluindo qualquer system prompt anterior)
+    for msg in history:
+        if msg["role"] != "system":
+            messages_with_rag.append(msg)
+
+    # 4. Chamar o LLM com streaming
+    logger.info("Chamando LLM com contexto RAG e streaming (%d chunks)", len(chunks))
+    yield from llm_service.chat_stream(messages_with_rag)
