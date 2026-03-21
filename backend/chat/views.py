@@ -232,19 +232,8 @@ def upload_document(request, conversation_id):
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
 
-    # 6. Gerar resumo via LLM
-    try:
-        summary = llm_service.summarize(extracted_text)
-        document.summary = summary
-        document.save()
-        logger.info("Resumo gerado: %d caracteres", len(summary))
-    except Exception as e:
-        logger.error("Erro ao gerar resumo: %s", e)
-        # Resumo é opcional — não deleta o documento se o LLM falhar
-        document.summary = f"[Resumo não disponível: {str(e)}]"
-        document.save()
-
-    # 7. Indexar documento no ChromaDB (Milestone 3 — RAG)
+    # 6. Indexar documento no ChromaDB (Milestone 3 — RAG)
+    # Resumo automático removido: a IA não deve tomar decisões sem o usuário pedir.
     try:
         rag_service.index_document(document)
         logger.info("Documento %d indexado com sucesso no ChromaDB", document.id)
@@ -306,6 +295,8 @@ def send_message_stream(request, conversation_id):
             status=400
         )
 
+    thinking = bool(data.get("thinking", False))
+
     # 3. Salvar a mensagem do usuário no banco ANTES de fazer streaming
     user_message = Message.objects.create(
         conversation=conversation,
@@ -330,11 +321,11 @@ def send_message_stream(request, conversation_id):
 
             # Escolher gerador (RAG ou chat simples)
             if has_rag:
-                logger.info("Usando RAG para stream")
-                token_gen = rag_service.ask_stream(conversation_id, content, messages_for_llm)
+                logger.info("Usando RAG para stream (thinking=%s)", thinking)
+                token_gen = rag_service.ask_stream(conversation_id, content, messages_for_llm, thinking=thinking)
             else:
-                logger.info("Chat stream sem RAG")
-                token_gen = llm_service.chat_stream(messages_for_llm)
+                logger.info("Chat stream sem RAG (thinking=%s)", thinking)
+                token_gen = llm_service.chat_stream(messages_for_llm, thinking=thinking)
 
             # Iterar tokens e fazer yield como SSE
             for token in token_gen:

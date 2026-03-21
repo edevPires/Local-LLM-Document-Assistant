@@ -4,9 +4,13 @@ Django settings for Local LLM Document Assistant.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Carrega variáveis do arquivo .env no diretório backend/
+load_dotenv(BASE_DIR / ".env")
 
 # Caminho raiz do monorepo (um nível acima do backend/)
 ROOT_DIR = BASE_DIR.parent

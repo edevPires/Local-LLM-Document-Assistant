@@ -170,7 +170,7 @@ def index_document(document) -> None:
     )
 
     # 1. Dividir em chunks
-    chunks = _chunk_text(document.extracted_text, chunk_size=500, overlap=100)
+    chunks = _chunk_text(document.extracted_text, chunk_size=800, overlap=200)
 
     if not chunks:
         raise ValueError("Nenhum chunk foi gerado do documento")
@@ -224,10 +224,14 @@ def search(
     ChromaDB compara o embedding da pergunta com todos os embeddings dos chunks
     e retorna os mais similares (usando similaridade de cosseno).
 
+    Além da busca semântica, os primeiros 2 chunks de cada documento são
+    sempre incluídos — eles contêm capa, autores e metadados que a busca
+    semântica tende a ignorar por terem baixa densidade de conteúdo.
+
     Args:
         conversation_id: ID da conversa (para acessar a coleção correta)
         query: pergunta do usuário
-        n_results: quantos chunks retornar
+        n_results: quantos chunks retornar via busca semântica
 
     Returns:
         lista com os chunks mais relevantes (strings)
@@ -236,24 +240,55 @@ def search(
 
     try:
         collection = get_collection(conversation_id)
+        total = collection.count()
+        if total == 0:
+            return []
 
-        # Gerar embedding da pergunta
+        # 1. Busca semântica
         model = _get_model()
         query_embedding = model.encode([query], convert_to_numpy=True)[0]
 
-        # Buscar no ChromaDB
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(n_results, collection.count()),  # evita pedir mais que tem
+            n_results=min(n_results, total),
         )
 
-        if not results["documents"] or not results["documents"][0]:
-            logger.warning("Nenhum chunk encontrado para: %s", query[:100])
-            return []
+        semantic_chunks: list[str] = []
+        semantic_ids: set[str] = set()
+        if results["documents"] and results["documents"][0]:
+            semantic_chunks = results["documents"][0]
+            semantic_ids = set(results["ids"][0])
 
-        chunks = results["documents"][0]
-        logger.info("Encontrados %d chunks", len(chunks))
-        return chunks
+        # 2. Primeiros chunks de cada documento (capa/autores)
+        all_meta = collection.get(include=["metadatas"])
+
+        # Contar chunks por documento
+        doc_chunk_counts: dict[str, int] = {}
+        for m in all_meta["metadatas"]:
+            doc_id = m["document_id"]
+            doc_chunk_counts[doc_id] = doc_chunk_counts.get(doc_id, 0) + 1
+
+        # Para todo documento: injeta chunk_0 (capa/início)
+        # Para documentos longos (> 10 chunks): injeta chunks 0-5 (front matter completo)
+        header_ids = []
+        for doc_id, count in doc_chunk_counts.items():
+            n_headers = 6 if count > 10 else 1
+            header_ids += [f"doc_{doc_id}_chunk_{i}" for i in range(n_headers)]
+
+        # Buscar apenas os que ainda não estão nos resultados semânticos
+        missing = [hid for hid in header_ids if hid not in semantic_ids]
+        header_chunks: list[str] = []
+        if missing:
+            fetched = collection.get(ids=missing, include=["documents"])
+            if fetched["documents"]:
+                header_chunks = fetched["documents"]
+
+        combined = header_chunks + semantic_chunks
+        logger.info(
+            "Chunks: %d cabeçalho + %d semânticos = %d total",
+            len(header_chunks), len(semantic_chunks), len(combined),
+        )
+        return combined
 
     except Exception as e:
         logger.error("Erro ao buscar chunks: %s", e)
@@ -275,6 +310,7 @@ def ask(
     conversation_id: int,
     question: str,
     history: list[dict],
+    thinking: bool = False,
 ) -> str:
     """
     Pipeline RAG completo: busca documentos, monta prompt, chama LLM.
@@ -299,13 +335,13 @@ def ask(
     logger.info("Iniciando pipeline RAG para conversa %d", conversation_id)
 
     # 1. Buscar chunks relevantes
-    chunks = search(conversation_id, question, n_results=3)
+    chunks = search(conversation_id, question, n_results=15)
 
     if not chunks:
         logger.warning(
             "Nenhum chunk encontrado. Caindo back para chat sem RAG."
         )
-        return llm_service.chat(history)
+        return llm_service.chat(history, thinking=thinking)
 
     # 2. Montar contexto
     context = "\n\n".join(chunks)
@@ -323,7 +359,7 @@ def ask(
 
     # 4. Chamar o LLM
     logger.info("Chamando LLM com contexto RAG (%d chunks)", len(chunks))
-    response = llm_service.chat(messages_with_rag)
+    response = llm_service.chat(messages_with_rag, thinking=thinking)
 
     return response
 
@@ -332,6 +368,7 @@ def ask_stream(
     conversation_id: int,
     question: str,
     history: list[dict],
+    thinking: bool = False,
 ):
     """
     Pipeline RAG completo com streaming (generator).
@@ -350,14 +387,14 @@ def ask_stream(
     logger.info("Iniciando pipeline RAG com streaming para conversa %d", conversation_id)
 
     # 1. Buscar chunks relevantes
-    chunks = search(conversation_id, question, n_results=3)
+    chunks = search(conversation_id, question, n_results=15)
 
     if not chunks:
         logger.warning(
             "Nenhum chunk encontrado. Caindo back para chat_stream sem RAG."
         )
         # Fallback: stream sem RAG
-        yield from llm_service.chat_stream(history)
+        yield from llm_service.chat_stream(history, thinking=thinking)
         return
 
     # 2. Montar contexto
@@ -376,4 +413,4 @@ def ask_stream(
 
     # 4. Chamar o LLM com streaming
     logger.info("Chamando LLM com contexto RAG e streaming (%d chunks)", len(chunks))
-    yield from llm_service.chat_stream(messages_with_rag)
+    yield from llm_service.chat_stream(messages_with_rag, thinking=thinking)

@@ -33,3 +33,12 @@ docs/
 Thumbs.db
 /backend/models
 .worktrees/
+
+# Claude Code — sessões, memória e planos pessoais
+.claude/
+
+# Variáveis de ambiente — tokens e secrets
+backend/.env
+frontend/.env.local
+.env
+.env.*

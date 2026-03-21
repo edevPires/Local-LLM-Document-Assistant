@@ -54,24 +54,29 @@ def _build_messages(messages_history):
     return messages_history
 
 
-def chat(messages_history):
+def chat(messages_history, thinking: bool = False):
     """
     Envia mensagens ao LLM e retorna a resposta completa.
 
     Args:
         messages_history: lista de dicts com {"role": str, "content": str}
+        thinking: se True, habilita o modo de raciocínio do Qwen3 (mais lento)
 
     Returns:
         str: a resposta gerada pelo modelo
     """
     messages = _build_messages(messages_history)
 
-    payload = json.dumps({
+    payload_dict = {
         "messages": messages,
         "temperature": settings.LLM_TEMPERATURE,
         "max_tokens": settings.LLM_MAX_TOKENS,
         "stream": False,
-    }).encode("utf-8")
+    }
+    if not thinking:
+        payload_dict["chat_template_kwargs"] = {"enable_thinking": False}
+
+    payload = json.dumps(payload_dict).encode("utf-8")
 
     req = urllib.request.Request(
         f"{settings.LLM_SERVER_URL}/v1/chat/completions",
@@ -97,21 +102,29 @@ def chat(messages_history):
         ) from e
 
 
-def chat_stream(messages_history):
+def chat_stream(messages_history, thinking: bool = False):
     """
     Envia mensagens ao LLM e retorna um generator que yield tokens um a um.
+
+    Args:
+        messages_history: lista de dicts com {"role": str, "content": str}
+        thinking: se True, habilita o modo de raciocínio do Qwen3 (mais lento)
 
     Yield:
         str: cada token gerado pelo modelo
     """
     messages = _build_messages(messages_history)
 
-    payload = json.dumps({
+    payload_dict = {
         "messages": messages,
         "temperature": settings.LLM_TEMPERATURE,
         "max_tokens": settings.LLM_MAX_TOKENS,
         "stream": True,
-    }).encode("utf-8")
+    }
+    if not thinking:
+        payload_dict["chat_template_kwargs"] = {"enable_thinking": False}
+
+    payload = json.dumps(payload_dict).encode("utf-8")
 
     req = urllib.request.Request(
         f"{settings.LLM_SERVER_URL}/v1/chat/completions",
