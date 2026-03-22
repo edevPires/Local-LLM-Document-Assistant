@@ -5,7 +5,7 @@ djangorestframework
 django-cors-headers
 
 # LLM — chamadas HTTP para o llama-server (stdlib, sem dependências extras)
-# O modelo roda via: C:\Users\bruno\llama.cpp\build\bin\llama-server.exe
+# O modelo roda via llama-server externo (ver start-llama.bat ou README)
 langchain
 langchain-community
 # llama-cpp-python  ← removido: substituído pelo llama-server externo

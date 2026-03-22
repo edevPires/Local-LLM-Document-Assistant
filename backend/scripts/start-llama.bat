@@ -1,7 +1,7 @@
 @echo off
 title llama-server — Qwen3.5-9B
 
-set LLAMA_EXE=C:\Users\bruno\llama.cpp\build\bin\llama-server.exe
+set LLAMA_EXE=llama-server
 set MODEL=%~dp0backend\models\Qwen3.5-9B-Q4_K_M.gguf
 
 echo.

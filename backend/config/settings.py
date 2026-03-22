@@ -126,10 +126,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ============================================================
 
 # URL do llama-server (processo externo com o modelo carregado na GPU)
-# Rodar antes do Django:
-#   C:\Users\bruno\llama.cpp\build\bin\llama-server.exe \
-#       --model backend/models/Qwen3.5-9B-Q4_K_M.gguf \
-#       --n-gpu-layers -1 --ctx-size 4096 --port 8080
+# Rodar antes do Django — exemplo:
+#   llama-server --model models/Qwen3-9B-Q4_K_M.gguf --n-gpu-layers -1 --ctx-size 32768 --port 8080
+# Ou use o start-llama.bat incluído na raiz do projeto.
 LLM_SERVER_URL = os.environ.get("LLM_SERVER_URL", "http://127.0.0.1:8080")
 
 # Temperatura: controla a "criatividade" do modelo.

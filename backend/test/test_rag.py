@@ -46,14 +46,14 @@ def test_rag_pipeline():
 
     # 2. Fazer upload de PDF
     print("\n2. Fazendo upload de PDF...")
-    pdf_path = Path("C:/Users/bruno/OneDrive/Documentos/GitHub/Local-LLM-Document-Assistant/downloads/Escopo_AppNotificacaoV0.pdf")
+    pdf_path = Path("downloads/sample.pdf")
 
     if not pdf_path.exists():
         print(f"   ! Arquivo não encontrado: {pdf_path}")
         print("   Procurando outros PDFs...")
 
-        # Procurar por PDFs na pasta Downloads
-        downloads = Path("C:/Users/bruno/Downloads")
+        # Procurar por PDFs na pasta Downloads do usuário atual
+        downloads = Path.home() / "Downloads"
         pdfs = list(downloads.glob("*.pdf"))
         if pdfs:
             pdf_path = pdfs[0]
@@ -77,7 +77,7 @@ def test_rag_pipeline():
             except ImportError:
                 print("   ! reportlab não instalado. Usando PDF existente...")
                 # Procurar PDFs em Downloads
-                downloads = Path("C:/Users/bruno/Downloads")
+                downloads = Path.home() / "Downloads"
                 pdfs = list(downloads.glob("*.pdf"))
                 if pdfs:
                     pdf_path = pdfs[0]

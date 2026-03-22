@@ -12,11 +12,8 @@ llama-server como um processo separado. O Django faz chamadas HTTP para ele.
 
 === COMO RODAR O SERVIDOR ===
 
-  C:\\Users\\bruno\\llama.cpp\\build\\bin\\llama-server.exe \\
-      --model backend/models/Qwen3.5-9B-Q4_K_M.gguf \\
-      --n-gpu-layers -1 \\
-      --ctx-size 4096 \\
-      --port 8080
+  llama-server --model models/Qwen3-9B-Q4_K_M.gguf --n-gpu-layers -1 --ctx-size 32768 --port 8080
+  (ou use o start-llama.bat na raiz do projeto)
 
 === API USADA ===
 
