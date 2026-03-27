@@ -13,6 +13,7 @@ langchain-community
 # Document processing (Milestone 2)
 PyPDF2
 python-docx
+weasyprint
 
 # RAG - Vector Store (Milestone 3)
 chromadb

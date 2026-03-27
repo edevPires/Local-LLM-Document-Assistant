@@ -1,8 +1,11 @@
 @echo off
-title llama-server — Qwen3.5-9B
+title llama-server — Qwen354B
 
-set LLAMA_EXE=llama-server
-set MODEL=%~dp0backend\models\Qwen3.5-9B-Q4_K_M.gguf
+:: Para usar o PATH do sistema, mantenha apenas: set LLAMA_EXE=llama-server
+:: Para usar caminho completo, ajuste abaixo:
+set LLAMA_EXE=C:\Users\bruno\llama.cpp\build\bin\llama-server.exe
+
+set MODEL=%~dp0..\models\Qwen354B.gguf
 
 echo.
 echo  [llama-server] iniciando Qwen3.5-9B...
